@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Toknix</title>
+  <style>
+    @font-face {
+      font-family: "Inter";
+      font-style: normal;
+      font-weight: 100 900;
+      font-display: swap;
+      src: url("/fonts/inter-latin.woff2") format("woff2");
+    }
+    :root {
+      color-scheme: dark;
+      --bg: #000;
+      --panel: #09090a;
+      --card: #0e0e10;
+      --raised: #17171a;
+      --hover: rgba(255, 255, 255, 0.035);
+      --line-1: rgba(255, 255, 255, 0.06);
+      --line-2: rgba(255, 255, 255, 0.09);
+      --line-3: rgba(255, 255, 255, 0.14);
+      --ink-1: #ededef;
+      --ink-2: #a0a0a8;
+      --ink-3: #6c6c74;
+      --ink-4: #46464c;
+      --accent-a: #5ad8e6;
+      --accent-b: #ed4abf;
+      --accent: #f068c8;
+      --focus: #5ad8e6;
+      --ok: #3ecf8e;
+      --warn: #f5a524;
+      --bad: #ff6166;
+      --live: #3ecf8e;
+      --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --r-control: 8px;
+      --r-card: 12px;
+      --r-pill: 999px;
+      --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
+    * { box-sizing: border-box; }
+    html {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+      background: var(--bg);
+    }
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      color: var(--ink-1);
+      background:
+        radial-gradient(60rem 28rem at 12% -10%, color-mix(in srgb, var(--accent-a) 7%, transparent), transparent 70%),
+        radial-gradient(50rem 26rem at 95% -12%, color-mix(in srgb, var(--accent-b) 6%, transparent), transparent 70%),
+        var(--bg);
+      font-family: var(--font-sans);
+      font-size: 13.5px;
+      line-height: 1.5;
+      font-feature-settings: "cv11", "ss01";
+    }
+    main { width: min(1120px, calc(100% - 56px)); margin: 0 auto; padding: 28px 0 48px; }
+    header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; }
+    h1 {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    h1 span {
+      background: linear-gradient(100deg, var(--accent-a), var(--accent-b));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .lede { margin: 4px 0 0; color: var(--ink-3); font-size: 12.5px; }
+    .actions { display: flex; gap: 8px; align-items: center; }
+    button {
+      display: inline-flex;
+      align-items: center;
+      height: 30px;
+      padding: 0 12px;
+      border-radius: var(--r-control);
+      border: 1px solid var(--line-2);
+      background: var(--raised);
+      color: var(--ink-1);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    button:hover:not(.chip) { border-color: var(--line-3); background: color-mix(in srgb, var(--raised) 80%, var(--ink-1) 6%); }
+    button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 30px;
+      padding: 0 11px;
+      border-radius: var(--r-pill);
+      border: 1px solid var(--line-2);
+      background: var(--card);
+      color: var(--ink-2);
+      font-size: 12.5px;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-4); box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04); }
+    .pill.live .dot { background: var(--live); box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.16); }
+    .pill.offline .dot { background: var(--bad); box-shadow: 0 0 0 3px rgba(255, 97, 102, 0.16); }
+    .chips {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+      gap: 8px;
+      margin: 22px 0 12px;
+    }
+    .chip, article {
+      border-radius: var(--r-card);
+      border: 1px solid transparent;
+      background:
+        linear-gradient(var(--card), var(--card)) padding-box,
+        linear-gradient(180deg, var(--line-3), var(--line-1) 40%) border-box;
+      box-shadow: var(--shadow-1);
+    }
+    .chip { padding: 10px 12px 9px; cursor: default; }
+    .chip b {
+      display: block;
+      margin-top: 2px;
+      color: var(--ink-1);
+      font-size: 14px;
+      font-weight: 550;
+      letter-spacing: -0.02em;
+      line-height: 1.25;
+      font-variant-numeric: tabular-nums;
+    }
+    .chip .caption {
+      display: block;
+      margin-top: 2px;
+      color: var(--ink-3);
+      font-size: 11.5px;
+      font-weight: 500;
+    }
+    .chip.setup b, .chip.session b { color: var(--ink-3); font-weight: 500; }
+    .chip.error b { color: var(--bad); }
+    .metric strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 24px;
+      font-weight: 550;
+      letter-spacing: -0.025em;
+      line-height: 1.15;
+      font-variant-numeric: tabular-nums;
+    }
+    .label { color: var(--ink-2); font-size: 12.5px; font-weight: 500; }
+    #board { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+    article { padding: 14px 16px 16px; min-height: 0; scroll-margin-top: 16px; }
+    article header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    article h2 { margin: 0; font-size: 14px; font-weight: 550; letter-spacing: -0.005em; }
+    .status { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-4); flex: none; }
+    .status.ok { background: var(--ok); }
+    .status.warn, .status.session { background: var(--warn); }
+    .status.error { background: var(--bad); }
+    .status.setup, .status.loading { background: var(--ink-4); }
+    article.setup, article.session, article.error { min-height: 0; }
+    .notice { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+    .notice p { margin: 0; color: var(--ink-2); font-size: 12.5px; }
+    .notice code {
+      display: block;
+      margin-top: 4px;
+      padding: 7px 8px;
+      border-radius: 6px;
+      background: var(--raised);
+      color: var(--ink-3);
+      font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      font-size: 11.5px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .detail, .footnote { color: var(--ink-3); font-size: 12.5px; }
+    .detail { min-height: 1.2em; margin: 4px 0 14px; }
+    .metrics { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    .bar { height: 2px; margin-top: 10px; border-radius: 99px; background: var(--line-2); overflow: hidden; }
+    .bar i { display: block; height: 100%; background: var(--accent-a); }
+    .metric:nth-child(2) .bar i { background: var(--accent-b); }
+    .bar i.warn { background: var(--warn); }
+    .bar i.bad { background: var(--bad); }
+    .error { margin: 12px 0 0; color: var(--ink-2); font-size: 12.5px; }
+    .updated {
+      color: var(--ink-3);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .updated.refreshing { color: var(--ink-2); }
+    ::selection { background: rgba(237, 74, 191, 0.14); color: var(--ink-1); }
+    @media (max-width: 800px) {
+      main { width: min(1120px, calc(100% - 32px)); }
+      .chips { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+      header { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <h1>Tok<span>nix</span></h1>
+        <p class="lede">Uso e saldo de cada provedor.</p>
+      </div>
+      <div class="actions">
+        <span id="updated" class="updated" aria-live="polite">Aguardando</span>
+        <span id="live" class="pill"><i class="dot"></i><span id="live-text">conectando</span></span>
+        <button id="refresh" type="button" title="Atalho: r">Atualizar</button>
+      </div>
+    </header>
+    <section class="chips" id="chips" aria-label="Resumo"></section>
+    <section id="board"></section>
+  </main>
+  <script>
+    const board = document.querySelector("#board");
+    const chipRow = document.querySelector("#chips");
+    const updated = document.querySelector("#updated");
+    const live = document.querySelector("#live");
+    const liveText = document.querySelector("#live-text");
+
+    function el(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text != null) node.textContent = text;
+      return node;
+    }
+
+    function tone(card) {
+      if (!card || card.loading || card.state === "loading") return "loading";
+      if (card.state === "setup" || card.state === "session" || card.state === "error") return card.state;
+      if (card.error) return "error";
+      return card.available ? "ok" : "warn";
+    }
+
+    function chipValue(card) {
+      if (!card || card.loading || card.state === "loading") return "…";
+      if (card.state === "setup") return "Não configurado";
+      if (card.state === "session") return "Sem sessão";
+      if (card.state === "error" || card.error) return "Falha";
+      return card.primary_value;
+    }
+
+    function notice(card) {
+      const box = el("div", "notice");
+      if (card.footnote) box.append(el("p", null, card.footnote));
+      if (card.error) box.append(el("code", null, card.error));
+      return box;
+    }
+
+    function bar(percent) {
+      if (percent == null) return null;
+      const value = Math.max(0, Math.min(100, Number(percent)));
+      const node = el("div", "bar");
+      const fill = document.createElement("i");
+      fill.style.width = value + "%";
+      fill.className = value > 40 ? "ok" : value > 15 ? "warn" : "bad";
+      node.append(fill);
+      return node;
+    }
+
+    function metric(label, value, percent) {
+      const cell = el("div", "metric");
+      cell.append(el("span", "label", label), el("strong", null, value));
+      const gauge = bar(percent);
+      if (gauge) cell.append(gauge);
+      return cell;
+    }
+
+    function render(payload) {
+      chipRow.replaceChildren();
+      board.replaceChildren();
+      for (const card of payload.cards) {
+        const kind = tone(card);
+        const chip = el("div", "chip " + kind);
+        chip.append(el("span", "label", card.title));
+        chip.append(el("b", null, chipValue(card)));
+        if (kind === "ok" || kind === "warn") chip.append(el("span", "caption", card.primary_label));
+        chipRow.append(chip);
+
+        const article = document.createElement("article");
+        article.id = "card-" + card.id;
+        if (kind === "setup" || kind === "session" || kind === "error") article.className = kind;
+        const head = document.createElement("header");
+        head.append(el("h2", null, card.title));
+        const status = el("i", "status " + kind);
+        status.title = card.detail || (card.available ? "disponível" : "indisponível");
+        head.append(status);
+        article.append(head);
+        if (kind === "setup" || kind === "session" || kind === "error") {
+          const hint = notice(card);
+          if (hint.childNodes.length) article.append(hint);
+        } else {
+          article.append(el("p", "detail", card.detail || " "));
+          const metrics = el("div", "metrics");
+          metrics.append(metric(card.secondary_label, card.secondary_value, card.secondary_percent));
+          article.append(metrics);
+          if (card.footnote) article.append(el("p", "footnote", card.footnote));
+        }
+        board.append(article);
+      }
+      const when = payload.generated_at
+        ? new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(payload.generated_at))
+        : "aguardando";
+      updated.classList.toggle("refreshing", Boolean(payload.refreshing));
+      updated.textContent = payload.refreshing ? "Atualizando" : "Atualizado às " + when;
+    }
+
+    async function loadStats() {
+      const response = await fetch("/api/stats", { cache: "no-store" });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      render(await response.json());
+    }
+
+    async function refresh() {
+      await fetch("/api/sync", { method: "POST" });
+    }
+
+    document.querySelector("#refresh").addEventListener("click", refresh);
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "r" || event.metaKey || event.ctrlKey || event.altKey) return;
+      const tag = document.activeElement && document.activeElement.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      event.preventDefault();
+      refresh();
+    });
+
+    const source = new EventSource("/api/events");
+    source.onopen = () => { live.className = "pill live"; liveText.textContent = "ao vivo"; };
+    source.onerror = () => { live.className = "pill offline"; liveText.textContent = "reconectando"; };
+    source.addEventListener("status", () => { loadStats().catch(() => {}); });
+    loadStats().catch(() => { updated.textContent = "Não foi possível ler o painel."; });
+    setInterval(() => { loadStats().catch(() => {}); }, 20000);
+  </script>
+</body>
+</html>

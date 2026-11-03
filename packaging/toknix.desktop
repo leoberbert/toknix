@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Toknix
+Comment=Uso e saldo de cada provedor
+Exec=toknix
+Icon=toknix
+StartupWMClass=toknix
+Terminal=false
+Categories=Utility;

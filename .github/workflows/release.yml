@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag da release, por exemplo v0.1.0. Vazio usa a versão do Cargo.toml."
+        required: false
+        type: string
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+      number: ${{ steps.resolve.outputs.number }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Resolve the release tag
+        id: resolve
+        run: |
+          set -eu
+          crate_version="$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            requested="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ inputs.version }}" ]; then
+            requested="${{ inputs.version }}"
+            requested="${requested#v}"
+          else
+            requested="$crate_version"
+          fi
+          test "$requested" = "$crate_version"
+          echo "tag=v${crate_version}" >> "$GITHUB_OUTPUT"
+          echo "number=${crate_version}" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: Linux AppImage
+    needs: version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        env:
+          CARGO_PROFILE_RELEASE_LTO: thin
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_STRIP: symbols
+        run: cargo build --release
+      - name: Package AppImage
+        env:
+          RELEASE_VERSION: ${{ needs.version.outputs.number }}
+        run: |
+          set -eu
+          version="$RELEASE_VERSION"
+          appdir="Toknix.AppDir"
+          mkdir -p "$appdir/usr/bin" "$appdir/usr/share/toknix"
+          cp target/release/toknix "$appdir/usr/bin/toknix"
+          cp assets/icons/toknix-256.png "$appdir/toknix.png"
+          cp packaging/toknix.desktop "$appdir/toknix.desktop"
+          cp packaging/linux-readme.txt "$appdir/usr/share/toknix/README.txt"
+          cat > "$appdir/AppRun" << 'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/toknix" "$@"
+          EOF
+          chmod +x "$appdir/AppRun" "$appdir/usr/bin/toknix"
+          curl -fsSL -o appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+          ARCH=x86_64 APPIMAGE_EXTRACT_AND_RUN=1 ./appimagetool "$appdir" "toknix-${version}-linux-x86_64.AppImage"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-appimage
+          path: toknix-*-linux-x86_64.AppImage
+          if-no-files-found: error
+
+  windows:
+    name: Windows x86_64
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        env:
+          CARGO_PROFILE_RELEASE_LTO: thin
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+          CARGO_PROFILE_RELEASE_STRIP: symbols
+        run: cargo build --release
+      - name: Package
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ needs.version.outputs.number }}
+        run: |
+          $version = $env:RELEASE_VERSION
+          $name = "toknix-$version-windows-x86_64"
+          New-Item -ItemType Directory -Force -Path $name | Out-Null
+          Copy-Item target/release/toknix.exe "$name/toknix.exe"
+          Copy-Item packaging/windows-readme.txt "$name/README.txt"
+          Compress-Archive -Path $name -DestinationPath "$name.zip" -Force
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-zip
+          path: toknix-*-windows-x86_64.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [version, linux, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          set -eu
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --target "${GITHUB_SHA}" \
+              --title "Toknix $TAG" \
+              --notes-file packaging/release-notes.md
+          fi
+          gh release upload "$TAG" dist/* --clobber
