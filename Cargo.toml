@@ -1,6 +1,6 @@
 [package]
 name = "toknix"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Local web dashboard for AI token and quota usage"
 license = "MIT"
@@ -9,6 +9,7 @@ authors = ["Leonardo Berbert"]
 
 [dependencies]
 aes = "0.8"
+aes-gcm = "0.11"
 axum = { version = "0.8", features = ["json"] }
 base64 = "0.22"
 cbc = { version = "0.1", features = ["alloc"] }
@@ -32,3 +33,6 @@ tower = { version = "0.5", features = ["util"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 secret-service = { version = "5", default-features = false, features = ["rt-tokio-crypto-rust"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-dpapi = "0.2"

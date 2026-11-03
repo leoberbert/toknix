@@ -224,11 +224,36 @@ pub fn default_kiro_db() -> PathBuf {
 }
 
 pub fn default_cursor_db() -> PathBuf {
-    paths::config_home()
-        .join("Cursor")
+    cursor_user_dir()
         .join("User")
         .join("globalStorage")
         .join("state.vscdb")
+}
+
+fn cursor_user_dir() -> PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        appdata_dir().join("Cursor")
+    }
+    #[cfg(target_os = "macos")]
+    {
+        paths::home_dir()
+            .join("Library")
+            .join("Application Support")
+            .join("Cursor")
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        paths::config_home().join("Cursor")
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn appdata_dir() -> PathBuf {
+    std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| paths::home_dir().join("AppData").join("Roaming"))
 }
 
 fn prefer_existing(current: PathBuf, legacy: PathBuf) -> PathBuf {
@@ -264,4 +289,44 @@ fn parse_host(value: &str) -> Result<IpAddr, String> {
         return Ok(IpAddr::from([127, 0, 0, 1]));
     }
     value.parse().map_err(|_| format!("host inválido: {value}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cursor_state_db_uses_the_platform_user_data_dir() {
+        let path = default_cursor_db();
+        let text = path.to_string_lossy().replace('\\', "/");
+        assert!(
+            text.ends_with("/Cursor/User/globalStorage/state.vscdb"),
+            "{text}"
+        );
+        #[cfg(target_os = "windows")]
+        {
+            let expected = appdata_dir()
+                .join("Cursor")
+                .join("User")
+                .join("globalStorage")
+                .join("state.vscdb");
+            assert_eq!(path, expected);
+        }
+        #[cfg(target_os = "macos")]
+        {
+            assert!(
+                text.contains("/Library/Application Support/Cursor/"),
+                "{text}"
+            );
+        }
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        {
+            let expected = paths::config_home()
+                .join("Cursor")
+                .join("User")
+                .join("globalStorage")
+                .join("state.vscdb");
+            assert_eq!(path, expected);
+        }
+    }
 }

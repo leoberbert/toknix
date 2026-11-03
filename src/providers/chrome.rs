@@ -104,6 +104,7 @@ fn platform_cookie_roots(home: &Path) -> Vec<PathBuf> {
     }
     #[cfg(target_os = "windows")]
     {
+        let _ = home;
         return std::env::var_os("LOCALAPPDATA")
             .map(|local| vec![PathBuf::from(local).join("Google/Chrome/User Data")])
             .unwrap_or_default();
