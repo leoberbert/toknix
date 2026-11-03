@@ -591,10 +591,19 @@ fn domain_token(message: &str) -> Option<&str> {
 
 fn shorten_home(message: &str) -> String {
     let home = crate::paths::home_dir().to_string_lossy().into_owned();
+    normalize_path_text(&replace_home(message, &home))
+}
+
+fn replace_home(message: &str, home: &str) -> String {
     if home.is_empty() || home == "." {
-        return message.to_string();
+        message.to_string()
+    } else {
+        message.replace(home, "~")
     }
-    message.replace(&home, "~")
+}
+
+fn normalize_path_text(message: &str) -> String {
+    message.replace('\\', "/")
 }
 
 fn capitalize(value: &str) -> String {
@@ -672,6 +681,15 @@ mod tests {
         assert_eq!(card.detail, "Sessão expirada");
         assert_eq!(card.footnote, "Rode kiro-cli login.");
         assert!(card.error.is_none());
+    }
+
+    #[test]
+    fn windows_home_prefixes_use_forward_slashes() {
+        let message = r"DEEPSEEK_API_KEY em C:\Users\runner\.env ou C:\Users\runner\.config\toknix\config.json";
+        assert_eq!(
+            normalize_path_text(&replace_home(message, r"C:\Users\runner")),
+            "DEEPSEEK_API_KEY em ~/.env ou ~/.config/toknix/config.json"
+        );
     }
 
     #[test]

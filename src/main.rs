@@ -1,7 +1,9 @@
 // A Windows release is a GUI-subsystem program, so opening the file from
 // Explorer does not leave a command window behind. A parent console is
 // attached when the program is started from one.
-#![cfg_attr(windows, windows_subsystem = "windows")]
+// Release builds hide the console. Test builds stay console programs so
+// `cargo test` can run the harness.
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 
 #[tokio::main]
 async fn main() {
