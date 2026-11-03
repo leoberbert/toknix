@@ -4,7 +4,9 @@ use crate::jsonutil::{float_opt, non_empty_str};
 use crate::providers::codex::jwt_payload;
 use crate::providers::MemoryCache;
 use crate::settings::Settings;
+#[cfg(any(target_os = "windows", test))]
 use aes_gcm::aead::Aead;
+#[cfg(any(target_os = "windows", test))]
 use aes_gcm::{Aes256Gcm, KeyInit};
 use base64::Engine;
 use reqwest::Client;
@@ -164,11 +166,11 @@ fn reveal_token(stored: &str) -> ProviderResult<String> {
 fn decrypt_safe_storage(blob: &[u8]) -> ProviderResult<String> {
     #[cfg(target_os = "windows")]
     {
-        return decrypt_windows_safe_storage(blob);
+        decrypt_windows_safe_storage(blob)
     }
     #[cfg(target_os = "macos")]
     {
-        return decrypt_macos_safe_storage(blob);
+        decrypt_macos_safe_storage(blob)
     }
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     {
@@ -176,6 +178,7 @@ fn decrypt_safe_storage(blob: &[u8]) -> ProviderResult<String> {
     }
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn decrypt_v10_gcm(blob: &[u8], key: &[u8]) -> Result<Vec<u8>, ()> {
     if blob.len() < 3 + 12 + 16 || &blob[..3] != b"v10" {
         return Err(());
