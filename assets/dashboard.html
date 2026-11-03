@@ -151,6 +151,8 @@
       line-height: 1.15;
       font-variant-numeric: tabular-nums;
     }
+    .metric strong.warn, .chip b.warn { color: var(--warn); }
+    .metric strong.bad, .chip b.bad { color: var(--bad); }
     .label { color: var(--ink-2); font-size: 12.5px; font-weight: 500; }
     #board { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
     article { padding: 14px 16px 16px; min-height: 0; scroll-margin-top: 16px; }
@@ -183,8 +185,8 @@
     .bar { height: 2px; margin-top: 10px; border-radius: 99px; background: var(--line-2); overflow: hidden; }
     .bar i { display: block; height: 100%; background: var(--accent-a); }
     .metric:nth-child(2) .bar i { background: var(--accent-b); }
-    .bar i.warn { background: var(--warn); }
-    .bar i.bad { background: var(--bad); }
+    .bar i.warn, .metric:nth-child(2) .bar i.warn { background: var(--warn); }
+    .bar i.bad, .metric:nth-child(2) .bar i.bad { background: var(--bad); }
     .error { margin: 12px 0 0; color: var(--ink-2); font-size: 12.5px; }
     .updated {
       color: var(--ink-3);
@@ -253,20 +255,29 @@
       return box;
     }
 
+    function pressure(percent) {
+      if (percent == null || Number.isNaN(Number(percent))) return "";
+      const used = 100 - Number(percent);
+      if (used >= 85) return "bad";
+      if (used >= 70) return "warn";
+      return "";
+    }
+
     function bar(percent) {
       if (percent == null) return null;
       const value = Math.max(0, Math.min(100, Number(percent)));
       const node = el("div", "bar");
       const fill = document.createElement("i");
       fill.style.width = value + "%";
-      fill.className = value > 40 ? "ok" : value > 15 ? "warn" : "bad";
+      const level = pressure(value);
+      if (level) fill.className = level;
       node.append(fill);
       return node;
     }
 
     function metric(label, value, percent) {
       const cell = el("div", "metric");
-      cell.append(el("span", "label", label), el("strong", null, value));
+      cell.append(el("span", "label", label), el("strong", pressure(percent), value));
       const gauge = bar(percent);
       if (gauge) cell.append(gauge);
       return cell;
@@ -279,7 +290,8 @@
         const kind = tone(card);
         const chip = el("div", "chip " + kind);
         chip.append(el("span", "label", card.title));
-        chip.append(el("b", null, chipValue(card)));
+        const chipLevel = kind === "ok" || kind === "warn" ? pressure(card.primary_percent) : "";
+        chip.append(el("b", chipLevel, chipValue(card)));
         if (kind === "ok" || kind === "warn") chip.append(el("span", "caption", card.primary_label));
         chipRow.append(chip);
 

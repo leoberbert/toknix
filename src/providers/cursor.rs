@@ -4,11 +4,27 @@ use crate::jsonutil::{float_opt, non_empty_str};
 use crate::providers::codex::jwt_payload;
 use crate::providers::MemoryCache;
 use crate::settings::Settings;
+#[cfg(any(target_os = "windows", test))]
+use aes_gcm::aead::Aead;
+#[cfg(any(target_os = "windows", test))]
+use aes_gcm::{Aes256Gcm, KeyInit};
+use base64::Engine;
 use reqwest::Client;
 use rusqlite::{Connection, OpenFlags};
 use serde_json::Value;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+#[cfg(not(target_os = "windows"))]
+use aes::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+#[cfg(not(target_os = "windows"))]
+use cbc::Decryptor;
+#[cfg(not(target_os = "windows"))]
+use pbkdf2::pbkdf2_hmac;
+#[cfg(not(target_os = "windows"))]
+use sha1::Sha1;
+#[cfg(not(target_os = "windows"))]
+type Aes128CbcDec = Decryptor<aes::Aes128>;
 
 const PERIOD_PATH: &str = "/aiserver.v1.DashboardService/GetCurrentPeriodUsage";
 const PLAN_PATH: &str = "/aiserver.v1.DashboardService/GetPlanInfo";
@@ -18,6 +34,8 @@ const ACCESS_TOKEN_KEY: &str = "cursorAuth/accessToken";
 const REFRESH_TOKEN_KEY: &str = "cursorAuth/refreshToken";
 const MEMBERSHIP_KEY: &str = "cursorAuth/stripeMembershipType";
 const LOGIN_HINT: &str = "Sessão do Cursor expirada; abra o Cursor e faça login";
+const SAFE_STORAGE_PREFIX: &str = "cursor-safe-storage:v1:";
+const ENCRYPTED_TOKEN: &str = "Não foi possível decifrar o token local do Cursor";
 
 #[derive(Debug, Clone)]
 struct CursorSession {
@@ -126,12 +144,165 @@ fn read_session(state_db: &Path) -> ProviderResult<CursorSession> {
             _ => {}
         }
     }
-    let access_token = access_token.ok_or_else(|| Failure::new(LOGIN_HINT))?;
+    let access_token = reveal_token(&access_token.ok_or_else(|| Failure::new(LOGIN_HINT))?)?;
+    let refresh_token = refresh_token.and_then(|token| reveal_token(&token).ok());
     Ok(CursorSession {
         access_token,
         refresh_token,
         plan,
     })
+}
+
+fn reveal_token(stored: &str) -> ProviderResult<String> {
+    let Some(payload) = stored.strip_prefix(SAFE_STORAGE_PREFIX) else {
+        return Ok(stored.to_string());
+    };
+    let blob = base64::engine::general_purpose::STANDARD
+        .decode(payload.trim())
+        .map_err(|_| Failure::new(ENCRYPTED_TOKEN))?;
+    decrypt_safe_storage(&blob)
+}
+
+fn decrypt_safe_storage(blob: &[u8]) -> ProviderResult<String> {
+    #[cfg(target_os = "windows")]
+    {
+        decrypt_windows_safe_storage(blob)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        decrypt_macos_safe_storage(blob)
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        decrypt_linux_safe_storage(blob)
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn decrypt_v10_gcm(blob: &[u8], key: &[u8]) -> Result<Vec<u8>, ()> {
+    if blob.len() < 3 + 12 + 16 || &blob[..3] != b"v10" {
+        return Err(());
+    }
+    let cipher = Aes256Gcm::new_from_slice(key).map_err(|_| ())?;
+    let nonce = aes_gcm::Nonce::try_from(&blob[3..15]).map_err(|_| ())?;
+    cipher.decrypt(&nonce, &blob[15..]).map_err(|_| ())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn decrypt_v10_cbc(blob: &[u8], key: &[u8]) -> Result<Vec<u8>, ()> {
+    if blob.len() <= 3 || &blob[..3] != b"v10" {
+        return Err(());
+    }
+    let decryptor = Aes128CbcDec::new_from_slices(key, b"                ").map_err(|_| ())?;
+    decryptor
+        .decrypt_padded_vec_mut::<Pkcs7>(&blob[3..])
+        .map_err(|_| ())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn derive_safe_storage_key(password: &[u8], iterations: u32) -> Vec<u8> {
+    let mut key = vec![0u8; 16];
+    pbkdf2_hmac::<Sha1>(password, b"saltysalt", iterations, &mut key);
+    key
+}
+
+fn utf8_secret(bytes: Vec<u8>) -> ProviderResult<String> {
+    String::from_utf8(bytes)
+        .map(|text| text.trim().to_string())
+        .map_err(|_| Failure::new(ENCRYPTED_TOKEN))
+        .and_then(|text| {
+            if text.is_empty() {
+                Err(Failure::new(ENCRYPTED_TOKEN))
+            } else {
+                Ok(text)
+            }
+        })
+}
+
+#[cfg(target_os = "windows")]
+fn decrypt_windows_safe_storage(blob: &[u8]) -> ProviderResult<String> {
+    if !blob.starts_with(b"v10") {
+        return Err(Failure::new(ENCRYPTED_TOKEN));
+    }
+    let key = windows_os_crypt_key()?;
+    utf8_secret(decrypt_v10_gcm(blob, &key).map_err(|_| Failure::new(ENCRYPTED_TOKEN))?)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_os_crypt_key() -> ProviderResult<Vec<u8>> {
+    let path = std::env::var_os("APPDATA")
+        .map(std::path::PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| crate::paths::home_dir().join("AppData").join("Roaming"))
+        .join("Cursor")
+        .join("Local State");
+    let text = std::fs::read_to_string(&path).map_err(|_| Failure::new(ENCRYPTED_TOKEN))?;
+    let value: Value = serde_json::from_str(text.trim_start_matches('\u{feff}'))
+        .map_err(|_| Failure::new(ENCRYPTED_TOKEN))?;
+    let encoded = value
+        .get("os_crypt")
+        .and_then(|item| item.get("encrypted_key"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| Failure::new(ENCRYPTED_TOKEN))?;
+    let protected = base64::engine::general_purpose::STANDARD
+        .decode(encoded.trim())
+        .map_err(|_| Failure::new(ENCRYPTED_TOKEN))?;
+    let blob = protected
+        .strip_prefix(b"DPAPI")
+        .ok_or_else(|| Failure::new(ENCRYPTED_TOKEN))?;
+    let key = windows_dpapi::decrypt_data(blob, windows_dpapi::Scope::User, None)
+        .map_err(|_| Failure::new(ENCRYPTED_TOKEN))?;
+    if key.len() != 32 {
+        return Err(Failure::new(ENCRYPTED_TOKEN));
+    }
+    Ok(key)
+}
+
+#[cfg(target_os = "macos")]
+fn decrypt_macos_safe_storage(blob: &[u8]) -> ProviderResult<String> {
+    let password = macos_safe_storage_password().ok_or_else(|| Failure::new(ENCRYPTED_TOKEN))?;
+    let key = derive_safe_storage_key(&password, 1003);
+    utf8_secret(decrypt_v10_cbc(blob, &key).map_err(|_| Failure::new(ENCRYPTED_TOKEN))?)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_safe_storage_password() -> Option<Vec<u8>> {
+    let attempts: [&[&str]; 2] = [
+        &[
+            "find-generic-password",
+            "-w",
+            "-s",
+            "Cursor Safe Storage",
+            "-a",
+            "Cursor",
+        ],
+        &["find-generic-password", "-w", "-s", "Cursor Safe Storage"],
+    ];
+    for args in attempts {
+        let Ok(output) = std::process::Command::new("security").args(args).output() else {
+            return None;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        let mut secret = output.stdout;
+        while secret
+            .last()
+            .is_some_and(|byte| *byte == b'\n' || *byte == b'\r')
+        {
+            secret.pop();
+        }
+        if !secret.is_empty() {
+            return Some(secret);
+        }
+    }
+    None
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn decrypt_linux_safe_storage(blob: &[u8]) -> ProviderResult<String> {
+    let key = derive_safe_storage_key(b"peanuts", 1);
+    utf8_secret(decrypt_v10_cbc(blob, &key).map_err(|_| Failure::new(ENCRYPTED_TOKEN))?)
 }
 
 pub async fn refresh_access_token(
@@ -407,5 +578,25 @@ mod tests {
         let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(r#"{"exp":100}"#);
         assert!(jwt_expired(&format!("{header}.{payload}.sig"), Some(200.0)));
         assert!(!jwt_expired("not-a-jwt", Some(200.0)));
+    }
+
+    #[test]
+    fn decrypts_a_windows_safe_storage_blob_and_keeps_plaintext_tokens() {
+        assert_eq!(reveal_token("access-1").unwrap(), "access-1");
+        let key = [9u8; 32];
+        let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
+        let nonce = aes_gcm::Nonce::try_from(b"0123456789ab".as_slice()).unwrap();
+        let mut blob = b"v10".to_vec();
+        blob.extend_from_slice(&nonce);
+        blob.extend(cipher.encrypt(&nonce, b"access-1".as_slice()).unwrap());
+        assert_eq!(decrypt_v10_gcm(&blob, &key).unwrap(), b"access-1");
+        assert!(decrypt_v10_gcm(&blob, &[1u8; 32]).is_err());
+
+        let stored = format!(
+            "{SAFE_STORAGE_PREFIX}{}",
+            base64::engine::general_purpose::STANDARD.encode(blob)
+        );
+        assert!(reveal_token(&stored).is_err());
+        assert!(reveal_token("cursor-safe-storage:v1:not-base64").is_err());
     }
 }
