@@ -53,13 +53,15 @@ Toknix does not ask you to log in again. It reuses the sessions already on the m
 | --- | --- |
 | Codex | `~/.codex/auth.json`. A 401 refreshes the token and writes the new tokens back, mode `600`. |
 | DeepSeek | `DEEPSEEK_API_KEY`, `~/.env`, or the config file. Spend is inferred from balance drops. |
-| Claude Code | Chrome cookies for `claude.ai`. |
-| MiMo | Chrome cookies for `platform.xiaomimimo.com`. |
+| Claude Code | Chrome or Firefox cookies for `claude.ai`. Chrome is tried first. |
+| MiMo | Chrome or Firefox cookies for `platform.xiaomimimo.com`. |
 | Kiro | Read-only token in the Kiro CLI database. Toknix never refreshes it. |
 | Cursor | Read-only token in the Cursor state database. A refreshed access token stays in memory for this process and is not written back. |
 | OpenAI | Admin key (`sk-admin-…`) with `api.usage.read`. |
 
 Chrome cookies use the Safe Storage secret from the Secret Service on Linux (or the macOS keychain) and, failing that, Chromium's `peanuts` password. The cookie database is copied before it is read, so a running Chrome does not block the scan. Decrypted cookies stay in memory.
+
+Firefox cookies are read from `cookies.sqlite` in each profile (`~/.config/mozilla/firefox` or `~/.mozilla/firefox` on Linux, including Snap and Flatpak; `%APPDATA%\Mozilla\Firefox\Profiles` on Windows). Firefox stores cookie values unencrypted. Both databases are copied before they are read, so a running browser does not block the scan. Decrypted cookies stay in memory.
 
 ## Configuration
 

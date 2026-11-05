@@ -1,7 +1,7 @@
 use crate::error::{Failure, ProviderResult};
 use crate::http::{self, execute};
 use crate::jsonutil::{float_opt, non_empty_str};
-use crate::providers::chrome;
+use crate::providers::{chrome, firefox};
 use crate::settings::Settings;
 use chrono::DateTime;
 use reqwest::Client;
@@ -44,6 +44,19 @@ pub async fn session_cookies(
     profile: Option<String>,
     keys: &OnceCell<Vec<Vec<u8>>>,
 ) -> ProviderResult<Vec<chrome::ChromeCookie>> {
+    match chrome_session_cookies(domain, profile, keys).await {
+        Ok(cookies) => Ok(cookies),
+        Err(chrome_error) => firefox_session_cookies(domain)
+            .await
+            .map_err(|firefox_error| Failure::new(format!("{chrome_error}; {firefox_error}"))),
+    }
+}
+
+async fn chrome_session_cookies(
+    domain: &str,
+    profile: Option<String>,
+    keys: &OnceCell<Vec<Vec<u8>>>,
+) -> ProviderResult<Vec<chrome::ChromeCookie>> {
     let key_material = keys.get_or_init(chrome::decryption_keys).await.clone();
     let domain = domain.to_string();
     tokio::task::spawn_blocking(move || {
@@ -51,6 +64,13 @@ pub async fn session_cookies(
     })
     .await
     .map_err(|error| Failure::new(format!("Falha ao ler os cookies do Chrome: {error}")))?
+}
+
+async fn firefox_session_cookies(domain: &str) -> ProviderResult<Vec<chrome::ChromeCookie>> {
+    let domain = domain.to_string();
+    tokio::task::spawn_blocking(move || firefox::load_cookies(&domain))
+        .await
+        .map_err(|error| Failure::new(format!("Falha ao ler os cookies do Firefox: {error}")))?
 }
 
 pub async fn fetch_web_usage(client: &Client, session: &str) -> ProviderResult<ClaudeUsage> {

@@ -104,10 +104,9 @@ fn platform_cookie_roots(home: &Path) -> Vec<PathBuf> {
     }
     #[cfg(target_os = "windows")]
     {
-        let _ = home;
-        std::env::var_os("LOCALAPPDATA")
+        return std::env::var_os("LOCALAPPDATA")
             .map(|local| vec![PathBuf::from(local).join("Google/Chrome/User Data")])
-            .unwrap_or_default()
+            .unwrap_or_default();
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
@@ -225,7 +224,7 @@ fn read_rows(database: &Path, domain: &str) -> ProviderResult<Vec<(String, Strin
     Ok(cookies)
 }
 
-fn open_copied(source: &Path) -> ProviderResult<(tempfile::TempDir, Connection)> {
+pub(crate) fn open_copied(source: &Path) -> ProviderResult<(tempfile::TempDir, Connection)> {
     let directory = tempfile::tempdir()
         .map_err(|error| Failure::new(format!("Não foi possível copiar os cookies: {error}")))?;
     let target = directory.path().join("Cookies");
