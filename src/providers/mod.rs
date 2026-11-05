@@ -3,6 +3,7 @@ pub mod claude;
 pub mod codex;
 pub mod cursor;
 pub mod deepseek;
+pub mod firefox;
 pub mod kiro;
 pub mod mimo;
 pub mod openai;

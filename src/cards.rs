@@ -499,7 +499,7 @@ fn session_action(message: &str) -> String {
         .split_whitespace()
         .find(|part| part.starts_with("http"))
     {
-        return format!("Abra o Chrome e entre em {}.", host_of(url));
+        return format!("Abra o Chrome ou o Firefox e entre em {}.", host_of(url));
     }
     if message.contains("Cursor") {
         return "Abra o Cursor e entre de novo.".to_string();
@@ -667,7 +667,10 @@ mod tests {
         );
         assert_eq!(card.state, "session");
         assert_eq!(card.detail, "Sem sessão");
-        assert_eq!(card.footnote, "Abra o Chrome e entre em claude.ai.");
+        assert_eq!(
+            card.footnote,
+            "Abra o Chrome ou o Firefox e entre em claude.ai."
+        );
         assert_eq!(
             card.error.as_deref(),
             Some("Cookies do Chrome não encontrados")
